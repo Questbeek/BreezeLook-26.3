@@ -1,0 +1,43 @@
+name: diag
+on:
+  push:
+    branches: [diag-api]
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build (populates caches)
+        run: ./gradlew build --no-daemon
+      - name: Dump API signatures
+        run: |
+          mkdir -p diag
+          find ~/.gradle .gradle -name '*.jar' -size +5M 2>/dev/null > diag/jars.txt || true
+          MC=""
+          while read -r j; do
+            if unzip -l "$j" net/minecraft/client/Minecraft.class >/dev/null 2>&1; then MC="$j"; echo "MC jar: $j"; break; fi
+          done < diag/jars.txt
+          echo "$MC" > diag/mcjar.txt
+          unzip -Z1 "$MC" | grep '\.class$' | sed 's/\.class$//' > diag/allclasses.txt
+          grep -E '^net/minecraft/(client/gui/|client/KeyMapping|client/Minecraft|client/MouseHandler|client/input/|resources/Identifier|network/chat/Component|network/chat/CommonComponents|core/registries/BuiltInRegistries|client/Options|client/player/LocalPlayer)|^com/mojang/blaze3d/platform/InputConstants' diag/allclasses.txt | sed 's#/#.#g' > diag/wanted.txt
+          wc -l diag/wanted.txt
+          xargs -a diag/wanted.txt javap -p -cp "$MC" > diag/mc-javap.txt 2>diag/javap-err.txt || true
+          # Fabric API nested jars
+          mkdir -p diag/fapi
+          for j in $(find ~/.gradle -name 'fabric-api-*.jar' ! -name '*sources*' 2>/dev/null); do unzip -qo "$j" 'META-INF/jars/*.jar' -d diag/fapi || true; done
+          find diag/fapi -name '*.jar' > diag/fapijars.txt
+          : > diag/fabric-javap.txt
+          while read -r j; do
+            unzip -Z1 "$j" | grep '\.class$' | grep -E 'api/client/(keymapping|keybinding|rendering|screen|event)' | sed 's/\.class$//;s#/#.#g' > diag/fc.txt || true
+            if [ -s diag/fc.txt ]; then xargs -a diag/fc.txt javap -p -cp "$j" >> diag/fabric-javap.txt 2>>diag/javap-err.txt || true; fi
+          done < diag/fapijars.txt
+          ls -la diag
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diag
+          path: diag/
