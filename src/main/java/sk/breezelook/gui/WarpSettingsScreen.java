@@ -6,7 +6,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -82,9 +81,10 @@ public class WarpSettingsScreen extends Screen {
         y += 34;
 
         iconLabelY = y;
-        searchBox = addBox(formX, y + 10, formW);
+        // the selected-icon preview sits on the label row (16px tall), so keep the search box below it
+        searchBox = addBox(formX, y + 20, formW);
         searchBox.setHint(Component.translatable("breezelook.settings.search"));
-        y += 32;
+        y += 42;
 
         gridX = formX;
         gridY = y;
@@ -114,6 +114,13 @@ public class WarpSettingsScreen extends Screen {
         int doneX = formX + (buttonWidth + 4) * 2;
         addRenderableWidget(Button.builder(Component.translatable("breezelook.settings.done"), button -> onClose())
                 .bounds(doneX, buttonsY, formX + formW - doneX, 20).build());
+
+        // The warp list and the icon grid are real widgets, so clicks and scrolling reach them
+        // through the normal "child under the cursor" routing, like the buttons above.
+        addRenderableWidget(new AreaWidget(listX, listY, listW, listH,
+                this::drawList, this::clickList, this::scrollList));
+        addRenderableWidget(new AreaWidget(gridX, gridY, gridCols * CELL, gridRows * CELL,
+                this::drawGrid, this::clickGrid, this::scrollGrid));
         updateButtons();
     }
 
@@ -231,14 +238,6 @@ public class WarpSettingsScreen extends Screen {
         return Math.max(0, totalGridRows() - gridRows);
     }
 
-    private boolean overList(double mx, double my) {
-        return mx >= listX && mx < listX + listW && my >= listY && my < listY + listH;
-    }
-
-    private boolean overGrid(double mx, double my) {
-        return mx >= gridX && mx < gridX + formW && my >= gridY && my < gridY + gridRows * CELL;
-    }
-
     /** Index into {@link #filtered} of the cell under the cursor, or -1. */
     private int gridIndexAt(double mx, double my) {
         if (mx < gridX || mx >= gridX + gridCols * CELL || my < gridY || my >= gridY + gridRows * CELL) return -1;
@@ -260,19 +259,15 @@ public class WarpSettingsScreen extends Screen {
         extractTransparentBackground(g);
         g.centeredText(font, title, width / 2, 10, 0xFFFFFFFF);
 
-        drawList(g, mx, my);
-
         g.text(font, Component.translatable("breezelook.settings.name"), formX, nameBox.getY() - 10, 0xFFA0A0A0);
         g.text(font, Component.translatable("breezelook.settings.horizontal"), horizontalBox.getX(), horizontalBox.getY() - 10, 0xFFA0A0A0);
         g.text(font, Component.translatable("breezelook.settings.vertical"), verticalBox.getX(), verticalBox.getY() - 10, 0xFFA0A0A0);
         g.text(font, Component.translatable("breezelook.settings.icon"), formX, iconLabelY, 0xFFA0A0A0);
-        g.item(WarpIcons.stackFor(selectedIcon), formX + formW - 16, iconLabelY - 4);
+        g.item(WarpIcons.stackFor(selectedIcon), formX + formW - 16, iconLabelY - 3);
 
         for (GuiEventListener child : children()) {
             if (child instanceof Renderable renderable) renderable.extractRenderState(g, mx, my, partialTick);
         }
-
-        drawGrid(g, mx, my);
 
         if (!status.getString().isEmpty()) {
             g.text(font, status, formX, buttonsY - 11, statusError ? 0xFFFF5555 : 0xFF55FF55);
@@ -343,46 +338,35 @@ public class WarpSettingsScreen extends Screen {
 
     // ---------------------------------------------------------------- input
 
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (super.mouseClicked(event, doubleClick)) return true;
-        if (event.button() != 0) return false;
-        double mx = event.x();
-        double my = event.y();
-
-        if (overList(mx, my)) {
-            int relative = (int) ((my - listY) / ROW);
-            if (relative < visibleRows()) {
-                int row = listScroll + relative;
-                if (row == 0) newPoint();
-                else if (row - 1 < names.size()) loadPoint(names.get(row - 1));
-            }
-            return true;
-        }
-
-        int index = gridIndexAt(mx, my);
-        if (index >= 0) {
-            String id = WarpIcons.idOf(filtered.get(index));
-            selectedIcon = id.equals(selectedIcon) ? null : id;
-            return true;
-        }
-        return false;
+    /** Click inside the warp list: the first row creates a new point, the others load an existing one. */
+    private void clickList(double mx, double my) {
+        int relative = (int) ((my - listY) / ROW);
+        if (relative < 0 || relative >= visibleRows()) return;
+        int row = listScroll + relative;
+        if (row == 0) newPoint();
+        else if (row - 1 < names.size()) loadPoint(names.get(row - 1));
     }
 
-    @Override
-    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
-        int step = (int) -Math.signum(scrollY);
-        if (step != 0) {
-            if (overList(mx, my)) {
-                int max = Math.max(0, names.size() + 1 - visibleRows());
-                listScroll = Math.max(0, Math.min(max, listScroll + step));
-                return true;
-            }
-            if (overGrid(mx, my)) {
-                gridScroll = Math.max(0, Math.min(maxGridScroll(), gridScroll + step));
-                return true;
-            }
-        }
-        return super.mouseScrolled(mx, my, scrollX, scrollY);
+    /** Click inside the icon grid: picks the icon, clicking the selected one again clears it. */
+    private void clickGrid(double mx, double my) {
+        int index = gridIndexAt(mx, my);
+        if (index < 0) return;
+        String id = WarpIcons.idOf(filtered.get(index));
+        selectedIcon = id.equals(selectedIcon) ? null : id;
+    }
+
+    private boolean scrollList(double mx, double my, double amount) {
+        int step = (int) -Math.signum(amount);
+        if (step == 0) return false;
+        int max = Math.max(0, names.size() + 1 - visibleRows());
+        listScroll = Math.max(0, Math.min(max, listScroll + step));
+        return true;
+    }
+
+    private boolean scrollGrid(double mx, double my, double amount) {
+        int step = (int) -Math.signum(amount);
+        if (step == 0) return false;
+        gridScroll = Math.max(0, Math.min(maxGridScroll(), gridScroll + step));
+        return true;
     }
 }
