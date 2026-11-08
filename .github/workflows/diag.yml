@@ -28,7 +28,7 @@ jobs:
           done < diag/jars.txt
           echo "$MC" > diag/mcjar.txt
           unzip -Z1 "$MC" | grep '\.class$' | sed 's/\.class$//' > diag/allclasses.txt
-          grep -E '^net/minecraft/(client/gui/|client/KeyMapping|client/Minecraft|client/MouseHandler|client/input/|resources/Identifier|network/chat/Component|network/chat/CommonComponents|core/registries/BuiltInRegistries|client/Options|client/player/LocalPlayer)|^com/mojang/blaze3d/platform/InputConstants' diag/allclasses.txt | sed 's#/#.#g' > diag/wanted.txt
+          grep -E '^net/minecraft/(core/Registry|core/DefaultedRegistry|core/DefaultedMappedRegistry|core/MappedRegistry|world/item/ItemStack|world/item/Item|world/level/block/Block|world/level/ItemLike|world/item/Items|network/chat/MutableComponent|network/chat/Style|util/Mth|util/ARGB|client/gui/Font)$|^com/mojang/blaze3d/platform/Window$|^net/minecraft/(client/gui/|client/KeyMapping|client/Minecraft|client/MouseHandler|client/input/|resources/Identifier|network/chat/Component|network/chat/CommonComponents|core/registries/BuiltInRegistries|client/Options|client/player/LocalPlayer)|^com/mojang/blaze3d/platform/InputConstants' diag/allclasses.txt | sed 's#/#.#g' > diag/wanted.txt
           wc -l diag/wanted.txt
           xargs -a diag/wanted.txt javap -p -cp "$MC" > diag/mc-javap.txt 2>diag/javap-err.txt || true
           # Fabric API nested jars
