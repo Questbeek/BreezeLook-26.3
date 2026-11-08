@@ -29,7 +29,7 @@ public class ModConfig implements ConfigData {
     @ConfigEntry.Gui.Tooltip()
     public float confirmHorizontal = 0;
     @ConfigEntry.Gui.Tooltip()
-    public float confirmVertical = -90;
+    public float confirmVertical = 90;
     @ConfigEntry.Gui.Tooltip()
     public boolean returnCamera = true;
     @ConfigEntry.Gui.Tooltip()

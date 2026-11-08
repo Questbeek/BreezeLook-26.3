@@ -69,7 +69,8 @@ public class Command {
         String pointName = StringArgumentType.getString(context, "name");
         float h = FloatArgumentType.getFloat(context, "horizontal");
         float v = FloatArgumentType.getFloat(context, "vertical");
-        points.put(pointName, new LookDirection(h,v, 0, 0));
+        LookDirection previous = points.get(pointName);
+        points.put(pointName, new LookDirection(h, v, 0, 0, previous != null ? previous.icon() : null));
         savePoints();
         context.getSource().sendFeedback(Component.translatable("breezelook.add", pointName));
         return 1;
@@ -88,10 +89,7 @@ public class Command {
     {
         String pointName = StringArgumentType.getString(context, "name");
         if (!points.containsKey(pointName)) return 1;
-        lookDirection = points.get(pointName);
-        context.getSource().getClient().player.setYRot(lookDirection.horizontal());
-        context.getSource().getClient().player.setXRot(lookDirection.vertical());
-        if (ModConfig.INSTANCE.confirm) commandUsed = true;
+        warpTo(pointName);
         return 1;
     }
 
@@ -100,7 +98,8 @@ public class Command {
         float h = FloatArgumentType.getFloat(context, "horizontal");
         float v = FloatArgumentType.getFloat(context, "vertical");
         if (!points.containsKey(pointName)) return 1;
-        points.put(pointName, new LookDirection(points.get(pointName).horizontal(), points.get(pointName).vertical(), h, v));
+        LookDirection previous = points.get(pointName);
+        points.put(pointName, new LookDirection(previous.horizontal(), previous.vertical(), h, v, previous.icon()));
         savePoints();
         context.getSource().sendFeedback(Component.translatable("breezelook.add_chamber"));
         return 1;
